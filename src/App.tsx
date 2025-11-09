@@ -111,7 +111,7 @@ const COURSES: CourseOption[] = [
   { docente: "CEVALLOS MUÑOZ OMAR ARTURO", subject: "FORMULACIÓN Y EVALUACIÓN DE PROYECTOS", sp: "10A", id: "FORMULACIÓN Y EVALUACIÓN DE PROYECTOS|10A|CEVALLOS MUÑOZ OMAR ARTURO" },
   { docente: "CEVALLOS MUÑOZ OMAR ARTURO", subject: "MÉTODOS NUMÉRICOS", sp: "4A", id: "MÉTODOS NUMÉRICOS|4A|CEVALLOS MUÑOZ OMAR ARTURO" },
 
-  { docente: "CULCAY VELIZ MARIASOL BELEN", subject: "CONTABILIDAD DE COSTOS", sp: "4A", id: "CONTABILIDAD DE COSTOS|4A|CULCAY VELIZ MARIASOL BELEN" },
+  { docente: "CULCAY VELIZ MARIASOL BELEN", subject: "CONTABILIDAD  DE COSTOS", sp: "4A", id: "CONTABILIDAD  DE COSTOS|4A|CULCAY VELIZ MARIASOL BELEN" },
   { docente: "CULCAY VELIZ MARIASOL BELEN", subject: "EMPRENDIMIENTO", sp: "9A", id: "EMPRENDIMIENTO|9A|CULCAY VELIZ MARIASOL BELEN" },
   { docente: "CULCAY VELIZ MARIASOL BELEN", subject: "INGENIERÍA ECONÓMICA", sp: "6A", id: "INGENIERÍA ECONÓMICA|6A|CULCAY VELIZ MARIASOL BELEN" },
   { docente: "CULCAY VELIZ MARIASOL BELEN", subject: "REDACCIÓN TÉCNICA", sp: "1B", id: "REDACCIÓN TÉCNICA|1B|CULCAY VELIZ MARIASOL BELEN" },
@@ -275,6 +275,7 @@ export default function UTQScheduler() {
   const slotKey = (dia: Dia, idx: number) => `${dia}|${idx}`;
 
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null); // ← tarjeta seleccionada
 
   /* Auth anónima */
   useEffect(() => {
@@ -402,6 +403,7 @@ export default function UTQScheduler() {
 
         tx.set(scheduleRef, { slots, assignments: asigs }, { merge: true });
       });
+      setSelectedCardId(null);
     } catch (e: any) {
       alert(e.message || "No se pudo mover");
     } finally {
@@ -409,7 +411,7 @@ export default function UTQScheduler() {
     }
   }
 
-  /* ===== Eliminar (click derecho) ===== */
+  /* ===== Eliminar ===== */
   async function deleteAssignment(id: string) {
     setBusy(true);
     try {
@@ -430,6 +432,7 @@ export default function UTQScheduler() {
 
         tx.set(scheduleRef, { slots, assignments: asigs }, { merge: true });
       });
+      setSelectedCardId(null);
     } catch (e: any) {
       alert(e.message || "No se pudo eliminar");
     } finally {
@@ -438,23 +441,52 @@ export default function UTQScheduler() {
   }
 
   /* ===== UI: Tarjeta ===== */
-  function AssignmentCard({ a }: { a: Assignment }) {
+  function TrashIcon() {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden>
+        <path d="M9 3h6a1 1 0 0 1 1 1v1h3a1 1 0 1 1 0 2h-1l-1 12a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3L4 7H3a1 1 0 1 1 0-2h3V4a1 1 0 0 1 1-1Zm1 2v0h4V4h-4v1Zm-2 2h8l1 12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1L8 7Zm2 3a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0v-7Zm6 0a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0v-7Z"/>
+      </svg>
+    );
+  }
+
+  function AssignmentCard({ a, isSelected }: { a: Assignment; isSelected: boolean }) {
     return (
       <DraggableCard id={a.id}>
         <div
-          className={`relative m-1 rounded-xl px-3 py-2 shadow-sm border ${a.color || "bg-blue-100 text-blue-800"}`}
+          className={`relative m-1 rounded-xl px-3 py-2 shadow-sm border ${a.color || "bg-blue-100 text-blue-800"} ${isSelected ? "ring-2 ring-blue-500" : ""}`}
           style={{ height: SLOT_PX }}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            deleteAssignment(a.id);
+          onClick={(e) => {
+            e.stopPropagation(); // no limpiar selección del grid
+            setSelectedCardId((prev) => (prev === a.id ? null : a.id));
           }}
-          title="Click izquierdo: arrastrar · Click derecho: eliminar"
+          title="Arrastra para mover. Haz click para mostrar el botón de eliminar."
         >
-          <div className="text-center leading-tight break-words">
+          {/* Contenido centrado */}
+          <div className="text-center leading-tight break-words select-none">
             <div className="text-[12px] font-semibold">{a.subject}</div>
             <div className="text-[11px] opacity-80">{a.sp}</div>
             <div className="text-[11px] font-medium">{a.docente}</div>
           </div>
+
+          {/* Mini botón papelera visible solo si está seleccionado */}
+          {isSelected && (
+            <button
+              className="absolute top-1.5 right-1.5 p-1 rounded-md bg-white/90 hover:bg-white border shadow text-red-600"
+              onMouseDown={(e) => {
+                // evita que comience el drag
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteAssignment(a.id);
+              }}
+              aria-label="Eliminar bloque"
+              title="Eliminar bloque"
+            >
+              <TrashIcon />
+            </button>
+          )}
         </div>
       </DraggableCard>
     );
@@ -472,7 +504,7 @@ export default function UTQScheduler() {
           style={{ height: SLOT_PX }}
           title="Arrastra a la grilla"
         >
-          <div className="text-center leading-tight">
+          <div className="text-center leading-tight select-none">
             <div className="text-[12px] font-semibold">{course.subject}</div>
             <div className="text-[11px] opacity-80">{course.sp}</div>
             <div className="text-[11px] font-medium">{course.docente}</div>
@@ -485,7 +517,7 @@ export default function UTQScheduler() {
   /* ===== UI: Grilla ===== */
   function Grid() {
     return (
-      <div className="w-full overflow-auto">
+      <div className="w-full overflow-auto" onClick={() => setSelectedCardId(null)}>
         <div className="min-w-[980px]">
           <div className="grid" style={{ gridTemplateColumns: `140px repeat(${DIAS.length}, 1fr)` }}>
             <div></div>
@@ -512,7 +544,8 @@ export default function UTQScheduler() {
                         if (!asgId) return null;
                         const a = assignments[asgId];
                         if (!a) return null;
-                        if (a.startSlotIndex === r && a.dia === d) return <AssignmentCard a={a} />;
+                        if (a.startSlotIndex === r && a.dia === d)
+                          return <AssignmentCard a={a} isSelected={selectedCardId === a.id} />;
                         return null;
                       })()}
                     </DropCell>
@@ -573,10 +606,10 @@ export default function UTQScheduler() {
       {/* Indicaciones */}
       <div className="p-3 bg-blue-50 text-blue-900 text-sm rounded-lg border border-blue-200">
         <strong>Indicaciones:</strong> arrastra con <strong>click izquierdo</strong> para mover un bloque.
-        Haz <strong>click derecho</strong> sobre un bloque para <strong>eliminarlo</strong>.
+        Haz click sobre un bloque para mostrar el botón <strong>papelera</strong> y eliminarlo.
       </div>
 
-      {/* Selector de asignatura (sin botón extra) */}
+      {/* Selector de asignatura */}
       <div className="flex flex-wrap items-center gap-3 p-4 rounded-2xl border bg-white shadow-sm">
         <CoursePicker value={selectedCourseId} setValue={setSelectedCourseId} />
         {busy && <span className="text-xs text-gray-500">Guardando…</span>}
