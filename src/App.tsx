@@ -196,6 +196,7 @@ const COURSES: CourseOption[] = [
 
 /* ================= Helpers de color ================= */
 /** Lista estática de clases para que Tailwind no purgue los colores */
+
 const COLOR_CLASSES = [
   "bg-sky-100 text-sky-800",
   "bg-blue-100 text-blue-800",
@@ -215,6 +216,16 @@ const COLOR_CLASSES = [
   "bg-teal-100 text-teal-800",
   "bg-cyan-100 text-cyan-800",
 ];
+
+/** Escala el tamaño del título según su longitud para que no “reviente” el bloque */
+function subjectSizeClass(text: string) {
+  const l = text.length;
+  if (l <= 22) return "text-[13px]";  // corto
+  if (l <= 30) return "text-[12px]";
+  if (l <= 40) return "text-[11px]";
+  if (l <= 55) return "text-[10px]";
+  return "text-[9px]";               // muy largo (p.ej. Sistemas de Gestión…)
+}
 
 /** Hash djb2 para mejor distribución */
 function djb2(str: string) {
@@ -493,75 +504,88 @@ export default function UTQScheduler() {
   }
 
   /* ===== Tarjeta (centrado total + color mejorado) ===== */
+  
   function AssignmentCard({ a, isSelected }: { a: Assignment; isSelected: boolean }) {
-    const colorClass = a.color || colorForKey(a.subject, a.sp);
-    return (
-      <DraggableCard id={a.id}>
-        <div
-          className={`relative h-full w-full box-border overflow-hidden rounded-2xl shadow-sm border ${colorClass} ${
-            isSelected ? "ring-2 ring-blue-500" : ""
-          }`}
-          style={{ minHeight: SLOT_PX - 8 }}
-          onClick={(e) => {
-            e.stopPropagation();
-            setSelectedCardId((prev) => (prev === a.id ? null : a.id));
-          }}
-          title="Arrastra para mover. Click para papelera y eliminar."
-        >
-          <div className="h-full w-full flex items-center justify-center text-center select-none p-2">
-            <div className="w-full text-center leading-tight">
-              <div className="text-[12px] font-extrabold tracking-wide break-words">{a.subject}</div>
-              <div className="text-[11px] opacity-80 font-semibold">{a.sp}</div>
-              <div className="text-[11px] font-medium break-words">{a.docente}</div>
-            </div>
-          </div>
+  const colorClass = a.color || colorForKey(a.subject, a.sp);
+  const titleSize = subjectSizeClass(a.subject);
 
-          {isSelected && (
-            <button
-              type="button"
-              className="absolute top-1 right-1 p-1 rounded-md bg-white/95 hover:bg-white border shadow text-red-600"
-              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-              onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-              onClick={(e) => { e.stopPropagation(); deleteAssignment(a.id); }}
-              aria-label="Eliminar bloque"
-              title="Eliminar bloque"
+  return (
+    <DraggableCard id={a.id}>
+      <div
+        className={`relative h-full w-full box-border overflow-hidden rounded-2xl shadow-sm border ${colorClass} ${
+          isSelected ? "ring-2 ring-blue-500" : ""
+        }`}
+        style={{ minHeight: SLOT_PX - 8 }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setSelectedCardId((prev) => (prev === a.id ? null : a.id));
+        }}
+        title="Arrastra para mover. Click para papelera y eliminar."
+      >
+        {/* Contenido centrado vertical y horizontal */}
+        <div className="h-full w-full flex items-center justify-center text-center select-none px-2 py-1">
+          <div className="w-full text-center leading-tight">
+            <div
+              className={`${titleSize} font-extrabold tracking-wide break-words`}
+              /* break-words mantiene el texto dentro del ancho del bloque */
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                <path d="M9 3h6a1 1 0 0 1 1 1v1h3a1 1 0 1 1 0 2h-1l-1 12a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3L4 7H3a1 1 0 1 1 0-2h3V4a1 1 0 0 1 1-1Zm1 2h4V4h-4v1Zm-2 2h8l1 12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1L8 7Zm2 3a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0v-7Zm6 0a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0v-7Z"/>
-              </svg>
-            </button>
-          )}
+              {a.subject}
+            </div>
+            <div className="text-[11px] opacity-80 font-semibold">{a.sp}</div>
+            <div className="text-[11px] font-medium break-words">{a.docente}</div>
+          </div>
         </div>
-      </DraggableCard>
-    );
-  }
+
+        {/* Botón papelera (solo visible cuando está seleccionado) */}
+        {isSelected && (
+          <button
+            type="button"
+            className="absolute top-1 right-1 p-1 rounded-md bg-white/95 hover:bg-white border shadow text-red-600"
+            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+            onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+            onClick={(e) => { e.stopPropagation(); deleteAssignment(a.id); }}
+            aria-label="Eliminar bloque"
+            title="Eliminar bloque"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <path d="M9 3h6a1 1 0 0 1 1 1v1h3a1 1 0 1 1 0 2h-1l-1 12a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3L4 7H3a1 1 0 1 1 0-2h3V4a1 1 0 0 1 1-1Zm1 2h4V4h-4v1Zm-2 2h8l1 12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1L8 7Zm2 3a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0v-7Zm6 0a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0v-7Z"/>
+            </svg>
+          </button>
+        )}
+      </div>
+    </DraggableCard>
+  );
+}
 
   /* ===== Tarjeta “nueva” para arrastrar ===== */
-  function NewCardPreview() {
-    const course = getSelectedCourse();
-    if (!course)
-      return <div className="text-xs text-gray-400">Selecciona una asignatura para activar el bloque</div>;
+function NewCardPreview() {
+  const course = getSelectedCourse();
+  if (!course)
+    return <div className="text-xs text-gray-400">Selecciona una asignatura para activar el bloque</div>;
 
-    const previewColor = colorForKey(course.subject, course.sp);
+  const previewColor = colorForKey(course.subject, course.sp);
+  const titleSize = subjectSizeClass(course.subject);
 
-    return (
-      <DraggableCard id="__new__">
-        <div
-          className={`${previewColor} h-full w-full box-border overflow-hidden rounded-2xl shadow-sm border`}
-          style={{ minHeight: SLOT_PX - 8 }}
-          title="Arrastra a la grilla"
-        >
-          <div className="h-full w-full flex items-center justify-center text-center select-none p-2">
-            <div className="w-full text-center leading-tight">
-              <div className="text-[12px] font-extrabold tracking-wide break-words">{course.subject}</div>
-              <div className="text-[11px] opacity-80 font-semibold">{course.sp}</div>
-              <div className="text-[11px] font-medium break-words">{course.docente}</div>
+  return (
+    <DraggableCard id="__new__">
+      <div
+        className={`${previewColor} h-full w-full box-border overflow-hidden rounded-2xl shadow-sm border`}
+        style={{ minHeight: SLOT_PX - 8 }}
+        title="Arrastra a la grilla"
+      >
+        <div className="h-full w-full flex items-center justify-center text-center select-none px-2 py-1">
+          <div className="w-full text-center leading-tight">
+            <div className={`${titleSize} font-extrabold tracking-wide break-words`}>
+              {course.subject}
             </div>
+            <div className="text-[11px] opacity-80 font-semibold">{course.sp}</div>
+            <div className="text-[11px] font-medium break-words">{course.docente}</div>
           </div>
         </div>
-      </DraggableCard>
-    );
-  }
+      </div>
+    </DraggableCard>
+  );
+}
 
   /* ===== Grilla ===== */
   function Grid() {
