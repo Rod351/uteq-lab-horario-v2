@@ -41,8 +41,8 @@ const LAB_ID = "lab-computo-uteq";
 const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie"] as const;
 type Dia = typeof DIAS[number];
 
-const SLOT_MIN = 60;      // bloques fijos de 60 minutos
-const SLOT_PX = 88;       // alto visual de cada fila
+const SLOT_MIN = 60;
+const SLOT_PX = 88;
 const HORA_INICIO = "07:30";
 const HORA_FIN = "17:30";
 const WEEKS = Array.from({ length: 18 }, (_, i) => i + 1);
@@ -62,7 +62,7 @@ function buildSlots() {
   for (let t = hhmmToMinutes(HORA_INICIO); t < hhmmToMinutes(HORA_FIN); t += SLOT_MIN) {
     out.push(minutesToHHMM(t));
   }
-  return out; // ej: ["07:30","08:30",...,"16:30"]
+  return out;
 }
 const SLOTS = buildSlots();
 const TIME_LABELS = [...SLOTS, HORA_FIN];
@@ -74,19 +74,21 @@ type Assignment = {
   sp: string;        // Semestre-Paralelo
   docente: string;
   dia: Dia;
-  startSlotIndex: number; // índice en SLOTS
-  durationSlots: number;  // siempre 1
-  color?: string;
+  startSlotIndex: number;
+  durationSlots: number;  // 1 (60 min)
+  color?: string;         // clases tailwind
   uid: string;
   updatedAt?: any;
 };
 type ScheduleDoc = {
-  slots?: Record<string, string>;         // key `${dia}|${slotIdx}` => assignmentId
+  slots?: Record<string, string>;         // `${dia}|${slotIdx}` => assignmentId
   assignments?: Record<string, Assignment>;
 };
 type CourseOption = { id: string; subject: string; sp: string; docente: string };
 
-/* ================= Catálogo de cursos ================= */
+/* ================= Catálogo de cursos (recortado a lo que enviaste) ================= */
+// — Usa exactamente el listado que ya te dejé previamente —
+// (lo mantengo igual por brevedad)
 const COURSES: CourseOption[] = [
   { docente: "ACOSTA MANOSALVAS JORGE JAVIER", subject: "MOTORES DE COMBUSTION INTERNA", sp: "8A", id: "MOTORES DE COMBUSTION INTERNA|8A|ACOSTA MANOSALVAS JORGE JAVIER" },
   { docente: "ACOSTA MANOSALVAS JORGE JAVIER", subject: "TERMODINÁMICA", sp: "5A", id: "TERMODINÁMICA|5A|ACOSTA MANOSALVAS JORGE JAVIER" },
@@ -192,23 +194,44 @@ const COURSES: CourseOption[] = [
   { docente: "ZZZ_FCI_1  X", subject: "FÍSICA", sp: "1B", id: "FÍSICA|1B|ZZZ_FCI_1  X" },
 ];
 
-/* ================= Helpers UI ================= */
-function colorForSubject(name: string) {
-  const colors = [
-    "bg-blue-100 text-blue-800",
-    "bg-emerald-100 text-emerald-800",
-    "bg-amber-100 text-amber-800",
-    "bg-fuchsia-100 text-fuchsia-800",
-    "bg-cyan-100 text-cyan-800",
-    "bg-rose-100 text-rose-800",
-  ];
-  const idx =
-    Math.abs(name.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) %
-    colors.length;
-  return colors[idx];
+/* ================= Helpers de color ================= */
+/** Lista estática de clases para que Tailwind no purgue los colores */
+const COLOR_CLASSES = [
+  "bg-sky-100 text-sky-800",
+  "bg-blue-100 text-blue-800",
+  "bg-indigo-100 text-indigo-800",
+  "bg-violet-100 text-violet-800",
+  "bg-purple-100 text-purple-800",
+  "bg-fuchsia-100 text-fuchsia-800",
+  "bg-pink-100 text-pink-800",
+  "bg-rose-100 text-rose-800",
+  "bg-red-100 text-red-800",
+  "bg-orange-100 text-orange-800",
+  "bg-amber-100 text-amber-800",
+  "bg-yellow-100 text-yellow-800",
+  "bg-lime-100 text-lime-800",
+  "bg-green-100 text-green-800",
+  "bg-emerald-100 text-emerald-800",
+  "bg-teal-100 text-teal-800",
+  "bg-cyan-100 text-cyan-800",
+];
+
+/** Hash djb2 para mejor distribución */
+function djb2(str: string) {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 33) ^ str.charCodeAt(i);
+  }
+  return Math.abs(hash);
 }
 
-/* ==== Limpieza de consistencia (anti “fantasmas”) ==== */
+/** Color estable por Asignatura + SP (más variedad que antes) */
+function colorForKey(subject: string, sp: string) {
+  const idx = djb2(`${subject}|${sp}`) % COLOR_CLASSES.length;
+  return COLOR_CLASSES[idx];
+}
+
+/* ==== Consistencia ==== */
 function sweepConsistency(
   slots: Record<string, string>,
   asigs: Record<string, Assignment>
@@ -235,7 +258,7 @@ function dropAllRefsOfId(slots: Record<string, string>, id: string) {
   for (const k of Object.keys(slots)) if (slots[k] === id) delete slots[k];
 }
 
-/* ==== Celda droppable (padding para que la tarjeta no se salga) ==== */
+/* ==== Celda droppable ==== */
 function DropCell({ id, children }: { id: string; children?: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
@@ -249,7 +272,7 @@ function DropCell({ id, children }: { id: string; children?: React.ReactNode }) 
   );
 }
 
-/* ==== Draggable simple ==== */
+/* ==== Draggable ==== */
 function DraggableCard({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id });
@@ -308,7 +331,7 @@ export default function UTQScheduler() {
   const slotKey = (dia: Dia, idx: number) => `${dia}|${idx}`;
 
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null); // para mostrar papelera
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
   /* Auth anónima */
   useEffect(() => {
@@ -367,7 +390,7 @@ export default function UTQScheduler() {
           dia,
           startSlotIndex,
           durationSlots: 1,
-          color: colorForSubject(course.subject),
+          color: colorForKey(course.subject, course.sp),
           uid,
           updatedAt: serverTimestamp(),
         };
@@ -377,7 +400,7 @@ export default function UTQScheduler() {
         tx.set(scheduleRef, { slots, assignments: asigs }, { merge: true });
       });
 
-      // Mantener la asignatura seleccionada activa para colocar varias veces.
+      // Mantener seleccionada la asignatura para colocar varias veces
     } catch (e: any) {
       alert(e.message || "No se pudo asignar");
     } finally {
@@ -385,7 +408,7 @@ export default function UTQScheduler() {
     }
   }
 
-  /* ===== Mover existente (limpieza total de refs + validación) ===== */
+  /* ===== Mover ===== */
   async function moveAssignment(id: string, dia: Dia, startSlotIndex: number) {
     setBusy(true);
     try {
@@ -398,13 +421,9 @@ export default function UTQScheduler() {
         const current = asigs[id];
         if (!current) throw new Error("No existe la asignación");
 
-        // Limpieza global
         sweepConsistency(slots, asigs);
-
-        // Borrar todas las refs previas del id por si quedó “basura”
         dropAllRefsOfId(slots, id);
 
-        // Validar destino
         const dur = 1;
         if (startSlotIndex < 0 || startSlotIndex + dur > SLOTS.length)
           throw new Error("Fuera de horario");
@@ -414,7 +433,6 @@ export default function UTQScheduler() {
           if (occ && occ !== id) throw new Error("Choque con otra asignatura");
         }
 
-        // Escribir nuevo
         for (let i = 0; i < dur; i++) slots[slotKey(dia, startSlotIndex + i)] = id;
 
         asigs[id] = {
@@ -474,14 +492,15 @@ export default function UTQScheduler() {
     }
   }
 
-  /* ===== Tarjeta con botón papelera (ajuste de tamaño) ===== */
+  /* ===== Tarjeta (centrado total + color mejorado) ===== */
   function AssignmentCard({ a, isSelected }: { a: Assignment; isSelected: boolean }) {
+    const colorClass = a.color || colorForKey(a.subject, a.sp);
     return (
       <DraggableCard id={a.id}>
         <div
-          className={`relative h-full w-full box-border overflow-hidden rounded-xl shadow-sm border ${
-            a.color || "bg-blue-100 text-blue-800"
-          } ${isSelected ? "ring-2 ring-blue-500" : ""}`}
+          className={`relative h-full w-full box-border overflow-hidden rounded-2xl shadow-sm border ${colorClass} ${
+            isSelected ? "ring-2 ring-blue-500" : ""
+          }`}
           style={{ minHeight: SLOT_PX - 8 }}
           onClick={(e) => {
             e.stopPropagation();
@@ -489,10 +508,10 @@ export default function UTQScheduler() {
           }}
           title="Arrastra para mover. Click para papelera y eliminar."
         >
-          <div className="h-full w-full flex items-center justify-center text-center leading-tight select-none px-2">
-            <div className="leading-[1.05]">
-              <div className="text-[12px] font-semibold break-words">{a.subject}</div>
-              <div className="text-[11px] opacity-80">{a.sp}</div>
+          <div className="h-full w-full flex items-center justify-center text-center select-none p-2">
+            <div className="w-full text-center leading-tight">
+              <div className="text-[12px] font-extrabold tracking-wide break-words">{a.subject}</div>
+              <div className="text-[11px] opacity-80 font-semibold">{a.sp}</div>
               <div className="text-[11px] font-medium break-words">{a.docente}</div>
             </div>
           </div>
@@ -500,7 +519,7 @@ export default function UTQScheduler() {
           {isSelected && (
             <button
               type="button"
-              className="absolute top-1 right-1 p-1 rounded-md bg-white/90 hover:bg-white border shadow text-red-600"
+              className="absolute top-1 right-1 p-1 rounded-md bg-white/95 hover:bg-white border shadow text-red-600"
               onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
               onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
               onClick={(e) => { e.stopPropagation(); deleteAssignment(a.id); }}
@@ -523,17 +542,19 @@ export default function UTQScheduler() {
     if (!course)
       return <div className="text-xs text-gray-400">Selecciona una asignatura para activar el bloque</div>;
 
+    const previewColor = colorForKey(course.subject, course.sp);
+
     return (
       <DraggableCard id="__new__">
         <div
-          className={`${colorForSubject(course.subject)} h-full w-full box-border overflow-hidden rounded-xl shadow-sm border`}
+          className={`${previewColor} h-full w-full box-border overflow-hidden rounded-2xl shadow-sm border`}
           style={{ minHeight: SLOT_PX - 8 }}
           title="Arrastra a la grilla"
         >
-          <div className="h-full w-full flex items-center justify-center text-center leading-tight select-none px-2">
-            <div className="leading-[1.05]">
-              <div className="text-[12px] font-semibold break-words">{course.subject}</div>
-              <div className="text-[11px] opacity-80">{course.sp}</div>
+          <div className="h-full w-full flex items-center justify-center text-center select-none p-2">
+            <div className="w-full text-center leading-tight">
+              <div className="text-[12px] font-extrabold tracking-wide break-words">{course.subject}</div>
+              <div className="text-[11px] opacity-80 font-semibold">{course.sp}</div>
               <div className="text-[11px] font-medium break-words">{course.docente}</div>
             </div>
           </div>
@@ -652,7 +673,7 @@ export default function UTQScheduler() {
           </div>
           <div className="w-72">
             <div className="text-sm text-gray-600 mb-2">Bloque activo</div>
-            <div className="min-h-[100px] p-2 rounded-xl border bg-white">
+            <div className="min-h-[100px] p-2 rounded-2xl border bg-white">
               <NewCardPreview />
             </div>
           </div>
