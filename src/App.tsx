@@ -44,7 +44,7 @@ type Dia = typeof DIAS[number];
 const SLOT_MIN = 60;      // bloques fijos de 60 minutos
 const SLOT_PX = 88;       // alto visual de cada fila
 const HORA_INICIO = "07:30";
-the const HORA_FIN = "17:30";
+const HORA_FIN = "17:30";
 const WEEKS = Array.from({ length: 18 }, (_, i) => i + 1);
 
 function hhmmToMinutes(hhmm: string) {
@@ -75,7 +75,7 @@ type Assignment = {
   docente: string;
   dia: Dia;
   startSlotIndex: number; // índice en SLOTS
-  durationSlots: number;  // compatibilidad (siempre 1)
+  durationSlots: number;  // siempre 1
   color?: string;
   uid: string;
   updatedAt?: any;
@@ -235,7 +235,7 @@ function dropAllRefsOfId(slots: Record<string, string>, id: string) {
   for (const k of Object.keys(slots)) if (slots[k] === id) delete slots[k];
 }
 
-/* ==== Celda droppable (con padding para que la tarjeta no se salga) ==== */
+/* ==== Celda droppable (padding para que la tarjeta no se salga) ==== */
 function DropCell({ id, children }: { id: string; children?: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
@@ -377,7 +377,7 @@ export default function UTQScheduler() {
         tx.set(scheduleRef, { slots, assignments: asigs }, { merge: true });
       });
 
-      // OJO: no limpiamos selectedCourseId para seguir colocando la misma asignatura
+      // Mantener la asignatura seleccionada activa para colocar varias veces.
     } catch (e: any) {
       alert(e.message || "No se pudo asignar");
     } finally {
@@ -517,7 +517,7 @@ export default function UTQScheduler() {
     );
   }
 
-  /* ===== Tarjeta “nueva” para arrastrar desde la derecha ===== */
+  /* ===== Tarjeta “nueva” para arrastrar ===== */
   function NewCardPreview() {
     const course = getSelectedCourse();
     if (!course)
