@@ -1,3 +1,6 @@
+¡perfecto! aquí tienes el **`src/App.tsx` COMPLETO** (con la selección de asignatura que **se mantiene activa** para seguir colocando más bloques). Copia y pega todo el archivo:
+
+```tsx
 import React, { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
@@ -74,8 +77,8 @@ type Assignment = {
   sp: string;        // Semestre - Paralelo
   docente: string;
   dia: Dia;
-  startSlotIndex: number;
-  durationSlots: number;  // mantenido por compatibilidad (siempre 1)
+  startSlotIndex: number; // índice de SLOTS
+  durationSlots: number;  // compatibilidad (ahora siempre 1)
   color?: string;
   uid: string;
   updatedAt?: any;
@@ -376,7 +379,9 @@ export default function UTQScheduler() {
 
         tx.set(scheduleRef, { slots, assignments: asigs }, { merge: true });
       });
-      setSelectedCourseId("");
+
+      // ¡Importante!: NO limpiar la selección para que el usuario siga colocando la misma asignatura.
+      // setSelectedCourseId("");  ← eliminado
     } catch (e: any) {
       alert(e.message || "No se pudo asignar");
     } finally {
@@ -384,7 +389,7 @@ export default function UTQScheduler() {
     }
   }
 
-  /* ===== Mover existente (ahora borra TODAS las refs del id y vuelve a colocar) ===== */
+  /* ===== Mover existente (limpieza total de refs + validación) ===== */
   async function moveAssignment(id: string, dia: Dia, startSlotIndex: number) {
     setBusy(true);
     try {
@@ -397,7 +402,7 @@ export default function UTQScheduler() {
         const current = asigs[id];
         if (!current) throw new Error("No existe la asignación");
 
-        // 1) Limpieza global de consistencia
+        // 1) Limpieza global
         sweepConsistency(slots, asigs);
 
         // 2) Borrar TODAS las referencias previas del id (por si quedó basura)
@@ -631,8 +636,7 @@ export default function UTQScheduler() {
 
       {/* Indicaciones */}
       <div className="p-3 bg-blue-50 text-blue-900 text-sm rounded-lg border border-blue-200">
-        <strong>Indicaciones:</strong> arrastra con <strong>click izquierdo</strong> para mover un bloque.
-        Haz click sobre un bloque para mostrar el botón <strong>papelera</strong> y eliminarlo.
+        <strong>Indicaciones:</strong> selecciona una asignatura y arrastra con <strong>click izquierdo</strong> para colocar o mover un bloque. Haz click sobre un bloque para mostrar el botón <strong>papelera</strong> y eliminarlo. La última asignatura seleccionada queda activa para colocar varias veces.
       </div>
 
       {/* Selector de asignatura */}
@@ -658,3 +662,6 @@ export default function UTQScheduler() {
     </div>
   );
 }
+```
+
+¿Quieres que también permita **doble click en una celda vacía** para colocar el bloque activo sin arrastrar? Te lo agrego en seguida.
