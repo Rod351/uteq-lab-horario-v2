@@ -41,8 +41,8 @@ const LAB_ID = "lab-computo-uteq";
 const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie"] as const;
 type Dia = typeof DIAS[number];
 
-const SLOT_MIN = 60;
-const SLOT_PX = 88;
+const SLOT_MIN = 60;          // 60 min por bloque
+const SLOT_PX = 88;           // alto visual por fila (puedes subir a 90–92 si quieres más aire)
 const HORA_INICIO = "07:30";
 const HORA_FIN = "17:30";
 const WEEKS = Array.from({ length: 18 }, (_, i) => i + 1);
@@ -71,7 +71,7 @@ const TIME_LABELS = [...SLOTS, HORA_FIN];
 type Assignment = {
   id: string;
   subject: string;
-  sp: string;        // Semestre-Paralelo
+  sp: string;        // Semestre - Paralelo
   docente: string;
   dia: Dia;
   startSlotIndex: number;
@@ -86,9 +86,7 @@ type ScheduleDoc = {
 };
 type CourseOption = { id: string; subject: string; sp: string; docente: string };
 
-/* ================= Catálogo de cursos (recortado a lo que enviaste) ================= */
-// — Usa exactamente el listado que ya te dejé previamente —
-// (lo mantengo igual por brevedad)
+/* ================= Catálogo de cursos (de tu listado) ================= */
 const COURSES: CourseOption[] = [
   { docente: "ACOSTA MANOSALVAS JORGE JAVIER", subject: "MOTORES DE COMBUSTION INTERNA", sp: "8A", id: "MOTORES DE COMBUSTION INTERNA|8A|ACOSTA MANOSALVAS JORGE JAVIER" },
   { docente: "ACOSTA MANOSALVAS JORGE JAVIER", subject: "TERMODINÁMICA", sp: "5A", id: "TERMODINÁMICA|5A|ACOSTA MANOSALVAS JORGE JAVIER" },
@@ -195,8 +193,6 @@ const COURSES: CourseOption[] = [
 ];
 
 /* ================= Helpers de color ================= */
-/** Lista estática de clases para que Tailwind no purgue los colores */
-
 const COLOR_CLASSES = [
   "bg-sky-100 text-sky-800",
   "bg-blue-100 text-blue-800",
@@ -217,17 +213,7 @@ const COLOR_CLASSES = [
   "bg-cyan-100 text-cyan-800",
 ];
 
-/** Escala el tamaño del título según su longitud para que no “reviente” el bloque */
-function subjectSizeClass(text: string) {
-  const l = text.length;
-  if (l <= 22) return "text-[13px]";  // corto
-  if (l <= 30) return "text-[12px]";
-  if (l <= 40) return "text-[11px]";
-  if (l <= 55) return "text-[10px]";
-  return "text-[9px]";               // muy largo (p.ej. Sistemas de Gestión…)
-}
-
-/** Hash djb2 para mejor distribución */
+/** Hash djb2 para distribuir colores de forma estable */
 function djb2(str: string) {
   let hash = 5381;
   for (let i = 0; i < str.length; i++) {
@@ -235,18 +221,30 @@ function djb2(str: string) {
   }
   return Math.abs(hash);
 }
-
-/** Color estable por Asignatura + SP (más variedad que antes) */
 function colorForKey(subject: string, sp: string) {
   const idx = djb2(`${subject}|${sp}`) % COLOR_CLASSES.length;
   return COLOR_CLASSES[idx];
 }
 
-/* ==== Consistencia ==== */
-function sweepConsistency(
-  slots: Record<string, string>,
-  asigs: Record<string, Assignment>
-) {
+/* ================= Tipografía: auto-escala ================= */
+/** Ajuste por longitud total y palabra más larga para que jamás se desborde */
+function subjectSizeClass(text: string) {
+  const len = text.length;
+  const longest = Math.max(...text.split(/\s+/).map((w) => w.length));
+
+  if (longest >= 18) return "text-[8px]";
+  if (longest >= 15) return "text-[9px]";
+
+  if (len <= 22) return "text-[13px]";
+  if (len <= 30) return "text-[12px]";
+  if (len <= 42) return "text-[11px]";
+  if (len <= 58) return "text-[10px]";
+  if (len <= 75) return "text-[9px]";
+  return "text-[8px]";
+}
+
+/* ================= Consistencia de datos ================= */
+function sweepConsistency(slots: Record<string, string>, asigs: Record<string, Assignment>) {
   for (const k of Object.keys(slots)) {
     const aid = slots[k];
     const a = asigs[aid];
@@ -269,7 +267,7 @@ function dropAllRefsOfId(slots: Record<string, string>, id: string) {
   for (const k of Object.keys(slots)) if (slots[k] === id) delete slots[k];
 }
 
-/* ==== Celda droppable ==== */
+/* ================= Celda Droppable ================= */
 function DropCell({ id, children }: { id: string; children?: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
@@ -283,10 +281,9 @@ function DropCell({ id, children }: { id: string; children?: React.ReactNode }) 
   );
 }
 
-/* ==== Draggable ==== */
+/* ================= Draggable Wrapper ================= */
 function DraggableCard({ id, children }: { id: string; children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({ id });
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id });
   const style = {
     transform: CSS.Translate.toString(transform),
     opacity: isDragging ? 0.85 : 1,
@@ -299,14 +296,8 @@ function DraggableCard({ id, children }: { id: string; children: React.ReactNode
   );
 }
 
-/* ==== Selector de cursos ==== */
-function CoursePicker({
-  value,
-  setValue,
-}: {
-  value: string;
-  setValue: (v: string) => void;
-}) {
+/* ================= Selector de Asignatura ================= */
+function CoursePicker({ value, setValue }: { value: string; setValue: (v: string) => void }) {
   return (
     <select
       className="border rounded-lg px-3 py-2 text-sm w-[560px]"
@@ -379,7 +370,7 @@ export default function UTQScheduler() {
         const slots = { ...(data.slots || {}) } as Record<string, string>;
         const asigs = { ...(data.assignments || {}) } as Record<string, Assignment>;
 
-        // Limpieza global
+        // Limpieza
         sweepConsistency(slots, asigs);
 
         // Validación destino (bloque de 60min)
@@ -410,8 +401,7 @@ export default function UTQScheduler() {
 
         tx.set(scheduleRef, { slots, assignments: asigs }, { merge: true });
       });
-
-      // Mantener seleccionada la asignatura para colocar varias veces
+      // Nota: mantenemos seleccionada la asignatura para colocar varias veces
     } catch (e: any) {
       alert(e.message || "No se pudo asignar");
     } finally {
@@ -503,91 +493,105 @@ export default function UTQScheduler() {
     }
   }
 
-  /* ===== Tarjeta (centrado total + color mejorado) ===== */
-  
+  /* ===== Tarjeta de Asignación ===== */
   function AssignmentCard({ a, isSelected }: { a: Assignment; isSelected: boolean }) {
-  const colorClass = a.color || colorForKey(a.subject, a.sp);
-  const titleSize = subjectSizeClass(a.subject);
+    const colorClass = a.color || colorForKey(a.subject, a.sp);
+    const titleSize = subjectSizeClass(a.subject);
 
-  return (
-    <DraggableCard id={a.id}>
-      <div
-        className={`relative h-full w-full box-border overflow-hidden rounded-2xl shadow-sm border ${colorClass} ${
-          isSelected ? "ring-2 ring-blue-500" : ""
-        }`}
-        style={{ minHeight: SLOT_PX - 8 }}
-        onClick={(e) => {
-          e.stopPropagation();
-          setSelectedCardId((prev) => (prev === a.id ? null : a.id));
-        }}
-        title="Arrastra para mover. Click para papelera y eliminar."
-      >
-        {/* Contenido centrado vertical y horizontal */}
-        <div className="h-full w-full flex items-center justify-center text-center select-none px-2 py-1">
-          <div className="w-full text-center leading-tight">
-            <div
-              className={`${titleSize} font-extrabold tracking-wide break-words`}
-              /* break-words mantiene el texto dentro del ancho del bloque */
+    return (
+      <DraggableCard id={a.id}>
+        <div
+          className={`relative h-full w-full box-border overflow-hidden rounded-2xl shadow-sm border ${colorClass} ${
+            isSelected ? "ring-2 ring-blue-500" : ""
+          }`}
+          style={{ minHeight: SLOT_PX - 8 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedCardId((prev) => (prev === a.id ? null : a.id));
+          }}
+          title="Arrastra para mover. Click para papelera y eliminar."
+        >
+          <div className="h-full w-full flex items-center justify-center text-center select-none px-2 py-1">
+            <div className="w-full text-center leading-tight">
+              <div
+                className={`${titleSize} font-extrabold tracking-tight leading-[1.05] break-words`}
+                style={{ hyphens: "auto", wordBreak: "break-word", textWrap: "balance" as any }}
+                lang="es"
+              >
+                {a.subject}
+              </div>
+              <div className="text-[10px] opacity-80 font-semibold mt-[2px]">{a.sp}</div>
+              <div
+                className="text-[10px] font-medium break-words"
+                style={{ hyphens: "auto", wordBreak: "break-word" }}
+                lang="es"
+              >
+                {a.docente}
+              </div>
+            </div>
+          </div>
+
+          {isSelected && (
+            <button
+              type="button"
+              className="absolute top-1 right-1 p-1 rounded-md bg-white/95 hover:bg-white border shadow text-red-600"
+              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              onClick={(e) => { e.stopPropagation(); deleteAssignment(a.id); }}
+              aria-label="Eliminar bloque"
+              title="Eliminar bloque"
             >
-              {a.subject}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <path d="M9 3h6a1 1 0 0 1 1 1v1h3a1 1 0 1 1 0 2h-1l-1 12a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3L4 7H3a1 1 0 1 1 0-2h3V4a1 1 0 0 1 1-1Zm1 2h4V4h-4v1Zm-2 2h8l1 12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1L8 7Zm2 3a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0v-7Zm6 0a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0v-7Z"/>
+              </svg>
+            </button>
+          )}
+        </div>
+      </DraggableCard>
+    );
+  }
+
+  /* ===== Vista previa del bloque activo (para arrastrar nuevo) ===== */
+  function NewCardPreview() {
+    const course = getSelectedCourse();
+    if (!course)
+      return <div className="text-xs text-gray-400">Selecciona una asignatura para activar el bloque</div>;
+
+    const previewColor = colorForKey(course.subject, course.sp);
+    const titleSize = subjectSizeClass(course.subject);
+
+    return (
+      <DraggableCard id="__new__">
+        <div
+          className={`${previewColor} h-full w-full box-border overflow-hidden rounded-2xl shadow-sm border`}
+          style={{ minHeight: SLOT_PX - 8 }}
+          title="Arrastra a la grilla"
+        >
+          <div className="h-full w-full flex items-center justify-center text-center select-none px-2 py-1">
+            <div className="w-full text-center leading-tight">
+              <div
+                className={`${titleSize} font-extrabold tracking-tight leading-[1.05] break-words`}
+                style={{ hyphens: "auto", wordBreak: "break-word", textWrap: "balance" as any }}
+                lang="es"
+              >
+                {course.subject}
+              </div>
+              <div className="text-[10px] opacity-80 font-semibold mt-[2px]">{course.sp}</div>
+              <div
+                className="text-[10px] font-medium break-words"
+                style={{ hyphens: "auto", wordBreak: "break-word" }}
+                lang="es"
+              >
+                {course.docente}
+              </div>
             </div>
-            <div className="text-[11px] opacity-80 font-semibold">{a.sp}</div>
-            <div className="text-[11px] font-medium break-words">{a.docente}</div>
           </div>
         </div>
+      </DraggableCard>
+    );
+  }
 
-        {/* Botón papelera (solo visible cuando está seleccionado) */}
-        {isSelected && (
-          <button
-            type="button"
-            className="absolute top-1 right-1 p-1 rounded-md bg-white/95 hover:bg-white border shadow text-red-600"
-            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-            onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-            onClick={(e) => { e.stopPropagation(); deleteAssignment(a.id); }}
-            aria-label="Eliminar bloque"
-            title="Eliminar bloque"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-              <path d="M9 3h6a1 1 0 0 1 1 1v1h3a1 1 0 1 1 0 2h-1l-1 12a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3L4 7H3a1 1 0 1 1 0-2h3V4a1 1 0 0 1 1-1Zm1 2h4V4h-4v1Zm-2 2h8l1 12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1L8 7Zm2 3a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0v-7Zm6 0a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0v-7Z"/>
-            </svg>
-          </button>
-        )}
-      </div>
-    </DraggableCard>
-  );
-}
-
-  /* ===== Tarjeta “nueva” para arrastrar ===== */
-function NewCardPreview() {
-  const course = getSelectedCourse();
-  if (!course)
-    return <div className="text-xs text-gray-400">Selecciona una asignatura para activar el bloque</div>;
-
-  const previewColor = colorForKey(course.subject, course.sp);
-  const titleSize = subjectSizeClass(course.subject);
-
-  return (
-    <DraggableCard id="__new__">
-      <div
-        className={`${previewColor} h-full w-full box-border overflow-hidden rounded-2xl shadow-sm border`}
-        style={{ minHeight: SLOT_PX - 8 }}
-        title="Arrastra a la grilla"
-      >
-        <div className="h-full w-full flex items-center justify-center text-center select-none px-2 py-1">
-          <div className="w-full text-center leading-tight">
-            <div className={`${titleSize} font-extrabold tracking-wide break-words`}>
-              {course.subject}
-            </div>
-            <div className="text-[11px] opacity-80 font-semibold">{course.sp}</div>
-            <div className="text-[11px] font-medium break-words">{course.docente}</div>
-          </div>
-        </div>
-      </div>
-    </DraggableCard>
-  );
-}
-
-  /* ===== Grilla ===== */
+  /* ===== Grilla de horario ===== */
   function Grid() {
     return (
       <div className="w-full overflow-auto" onClick={() => setSelectedCardId(null)}>
@@ -634,7 +638,7 @@ function NewCardPreview() {
     );
   }
 
-  /* DnD */
+  /* ===== DnD handlers ===== */
   function onDragStart() {}
   async function onDragEnd(ev: any) {
     const { active, over } = ev;
@@ -690,6 +694,7 @@ function NewCardPreview() {
         {busy && <span className="text-xs text-gray-500">Guardando…</span>}
       </div>
 
+      {/* Grilla + Bloque activo */}
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} collisionDetection={closestCorners}>
         <div className="flex gap-4">
           <div className="flex-1">
