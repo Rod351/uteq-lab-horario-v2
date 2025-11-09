@@ -41,10 +41,10 @@ const LAB_ID = "lab-computo-uteq";
 const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie"] as const;
 type Dia = typeof DIAS[number];
 
-const SLOT_MIN = 60;    // bloque fijo de 60 minutos
-const SLOT_PX = 88;     // altura visual de cada fila
+const SLOT_MIN = 60;      // bloques fijos de 60 minutos
+const SLOT_PX = 88;       // alto visual de cada fila
 const HORA_INICIO = "07:30";
-const HORA_FIN = "17:30";
+the const HORA_FIN = "17:30";
 const WEEKS = Array.from({ length: 18 }, (_, i) => i + 1);
 
 function hhmmToMinutes(hhmm: string) {
@@ -62,7 +62,7 @@ function buildSlots() {
   for (let t = hhmmToMinutes(HORA_INICIO); t < hhmmToMinutes(HORA_FIN); t += SLOT_MIN) {
     out.push(minutesToHHMM(t));
   }
-  return out; // ["07:30","08:30",...,"16:30"]
+  return out; // ej: ["07:30","08:30",...,"16:30"]
 }
 const SLOTS = buildSlots();
 const TIME_LABELS = [...SLOTS, HORA_FIN];
@@ -71,11 +71,11 @@ const TIME_LABELS = [...SLOTS, HORA_FIN];
 type Assignment = {
   id: string;
   subject: string;
-  sp: string;        // Semestre - Paralelo
+  sp: string;        // Semestre-Paralelo
   docente: string;
   dia: Dia;
-  startSlotIndex: number; // índice de SLOTS
-  durationSlots: number;  // compatibilidad (ahora siempre 1)
+  startSlotIndex: number; // índice en SLOTS
+  durationSlots: number;  // compatibilidad (siempre 1)
   color?: string;
   uid: string;
   updatedAt?: any;
@@ -86,7 +86,7 @@ type ScheduleDoc = {
 };
 type CourseOption = { id: string; subject: string; sp: string; docente: string };
 
-/* ================= Catálogo completo ================= */
+/* ================= Catálogo de cursos ================= */
 const COURSES: CourseOption[] = [
   { docente: "ACOSTA MANOSALVAS JORGE JAVIER", subject: "MOTORES DE COMBUSTION INTERNA", sp: "8A", id: "MOTORES DE COMBUSTION INTERNA|8A|ACOSTA MANOSALVAS JORGE JAVIER" },
   { docente: "ACOSTA MANOSALVAS JORGE JAVIER", subject: "TERMODINÁMICA", sp: "5A", id: "TERMODINÁMICA|5A|ACOSTA MANOSALVAS JORGE JAVIER" },
@@ -208,7 +208,7 @@ function colorForSubject(name: string) {
   return colors[idx];
 }
 
-/* ==== Limpieza de consistencia (anti-choques fantasma) ==== */
+/* ==== Limpieza de consistencia (anti “fantasmas”) ==== */
 function sweepConsistency(
   slots: Record<string, string>,
   asigs: Record<string, Assignment>
@@ -231,26 +231,25 @@ function sweepConsistency(
     if (!valid) delete slots[k];
   }
 }
-
 function dropAllRefsOfId(slots: Record<string, string>, id: string) {
-  for (const k of Object.keys(slots)) {
-    if (slots[k] === id) delete slots[k];
-  }
+  for (const k of Object.keys(slots)) if (slots[k] === id) delete slots[k];
 }
 
+/* ==== Celda droppable (con padding para que la tarjeta no se salga) ==== */
 function DropCell({ id, children }: { id: string; children?: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
     <div
       ref={setNodeRef}
       style={{ height: SLOT_PX }}
-      className={`relative border border-gray-200 hover:bg-gray-50 ${isOver ? "ring-2 ring-blue-400" : ""}`}
+      className={`relative border border-gray-200 ${isOver ? "ring-2 ring-blue-400" : ""} p-1`}
     >
-      {children}
+      <div className="w-full h-full">{children}</div>
     </div>
   );
 }
 
+/* ==== Draggable simple ==== */
 function DraggableCard({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id });
@@ -266,6 +265,7 @@ function DraggableCard({ id, children }: { id: string; children: React.ReactNode
   );
 }
 
+/* ==== Selector de cursos ==== */
 function CoursePicker({
   value,
   setValue,
@@ -308,7 +308,7 @@ export default function UTQScheduler() {
   const slotKey = (dia: Dia, idx: number) => `${dia}|${idx}`;
 
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null); // selección para mostrar papelera
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null); // para mostrar papelera
 
   /* Auth anónima */
   useEffect(() => {
@@ -333,7 +333,7 @@ export default function UTQScheduler() {
     return COURSES.find((c) => c.id === selectedCourseId) || null;
   }
 
-  /* ===== Crear nuevo ===== */
+  /* ===== Crear ===== */
   async function placeAssignment(dia: Dia, startSlotIndex: number) {
     const course = getSelectedCourse();
     if (!course) return alert("Selecciona primero una asignatura");
@@ -345,10 +345,10 @@ export default function UTQScheduler() {
         const slots = { ...(data.slots || {}) } as Record<string, string>;
         const asigs = { ...(data.assignments || {}) } as Record<string, Assignment>;
 
-        // 1) Limpieza global de consistencia
+        // Limpieza global
         sweepConsistency(slots, asigs);
 
-        // 2) Validación destino
+        // Validación destino (bloque de 60min)
         const dur = 1;
         if (startSlotIndex < 0 || startSlotIndex + dur > SLOTS.length)
           throw new Error("Fuera de horario");
@@ -357,7 +357,7 @@ export default function UTQScheduler() {
           if (slots[k]) throw new Error("Ese casillero ya está ocupado");
         }
 
-        // 3) Crear
+        // Crear
         const id = `a_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
         const asg: Assignment = {
           id,
@@ -377,8 +377,7 @@ export default function UTQScheduler() {
         tx.set(scheduleRef, { slots, assignments: asigs }, { merge: true });
       });
 
-      // ¡Importante!: NO limpiar la selección para que el usuario siga colocando la misma asignatura.
-      // setSelectedCourseId("");  ← eliminado
+      // OJO: no limpiamos selectedCourseId para seguir colocando la misma asignatura
     } catch (e: any) {
       alert(e.message || "No se pudo asignar");
     } finally {
@@ -399,13 +398,13 @@ export default function UTQScheduler() {
         const current = asigs[id];
         if (!current) throw new Error("No existe la asignación");
 
-        // 1) Limpieza global
+        // Limpieza global
         sweepConsistency(slots, asigs);
 
-        // 2) Borrar TODAS las referencias previas del id (por si quedó basura)
+        // Borrar todas las refs previas del id por si quedó “basura”
         dropAllRefsOfId(slots, id);
 
-        // 3) Validar destino
+        // Validar destino
         const dur = 1;
         if (startSlotIndex < 0 || startSlotIndex + dur > SLOTS.length)
           throw new Error("Fuera de horario");
@@ -415,7 +414,7 @@ export default function UTQScheduler() {
           if (occ && occ !== id) throw new Error("Choque con otra asignatura");
         }
 
-        // 4) Escribir nuevo destino
+        // Escribir nuevo
         for (let i = 0; i < dur; i++) slots[slotKey(dia, startSlotIndex + i)] = id;
 
         asigs[id] = {
@@ -469,50 +468,48 @@ export default function UTQScheduler() {
       });
       setSelectedCardId(null);
     } catch (e: any) {
-      alert(e.message || "No se pudo eliminar (revisa Reglas/App Check)");
+      alert(e.message || "No se pudo eliminar");
     } finally {
       setBusy(false);
     }
   }
 
-  /* ===== UI: Tarjeta con botón papelera ===== */
-  function TrashIcon() {
-    return (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden>
-        <path d="M9 3h6a1 1 0 0 1 1 1v1h3a1 1 0 1 1 0 2h-1l-1 12a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3L4 7H3a1 1 0 1 1 0-2h3V4a1 1 0 0 1 1-1Zm1 2v0h4V4h-4v1Zm-2 2h8l1 12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1L8 7Zm2 3a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0v-7Zm6 0a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0v-7Z"/>
-      </svg>
-    );
-  }
-
+  /* ===== Tarjeta con botón papelera (ajuste de tamaño) ===== */
   function AssignmentCard({ a, isSelected }: { a: Assignment; isSelected: boolean }) {
     return (
       <DraggableCard id={a.id}>
         <div
-          className={`relative m-1 rounded-xl px-3 py-2 shadow-sm border ${a.color || "bg-blue-100 text-blue-800"} ${isSelected ? "ring-2 ring-blue-500" : ""}`}
-          style={{ height: SLOT_PX }}
+          className={`relative h-full w-full box-border overflow-hidden rounded-xl shadow-sm border ${
+            a.color || "bg-blue-100 text-blue-800"
+          } ${isSelected ? "ring-2 ring-blue-500" : ""}`}
+          style={{ minHeight: SLOT_PX - 8 }}
           onClick={(e) => {
             e.stopPropagation();
             setSelectedCardId((prev) => (prev === a.id ? null : a.id));
           }}
-          title="Arrastra para mover. Haz click para mostrar el botón de eliminar."
+          title="Arrastra para mover. Click para papelera y eliminar."
         >
-          <div className="text-center leading-tight break-words select-none">
-            <div className="text-[12px] font-semibold">{a.subject}</div>
-            <div className="text-[11px] opacity-80">{a.sp}</div>
-            <div className="text-[11px] font-medium">{a.docente}</div>
+          <div className="h-full w-full flex items-center justify-center text-center leading-tight select-none px-2">
+            <div className="leading-[1.05]">
+              <div className="text-[12px] font-semibold break-words">{a.subject}</div>
+              <div className="text-[11px] opacity-80">{a.sp}</div>
+              <div className="text-[11px] font-medium break-words">{a.docente}</div>
+            </div>
           </div>
 
           {isSelected && (
             <button
               type="button"
-              className="absolute top-1.5 right-1.5 p-1 rounded-md bg-white/90 hover:bg-white border shadow text-red-600"
+              className="absolute top-1 right-1 p-1 rounded-md bg-white/90 hover:bg-white border shadow text-red-600"
               onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
               onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
               onClick={(e) => { e.stopPropagation(); deleteAssignment(a.id); }}
               aria-label="Eliminar bloque"
               title="Eliminar bloque"
             >
-              <TrashIcon />
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <path d="M9 3h6a1 1 0 0 1 1 1v1h3a1 1 0 1 1 0 2h-1l-1 12a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3L4 7H3a1 1 0 1 1 0-2h3V4a1 1 0 0 1 1-1Zm1 2h4V4h-4v1Zm-2 2h8l1 12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1L8 7Zm2 3a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0v-7Zm6 0a1 1 0 1 0-2 0v7a1 1 0 1 0 2 0v-7Z"/>
+              </svg>
             </button>
           )}
         </div>
@@ -520,29 +517,32 @@ export default function UTQScheduler() {
     );
   }
 
-  /* Tarjeta “nueva” (drag desde selector) */
+  /* ===== Tarjeta “nueva” para arrastrar desde la derecha ===== */
   function NewCardPreview() {
     const course = getSelectedCourse();
     if (!course)
       return <div className="text-xs text-gray-400">Selecciona una asignatura para activar el bloque</div>;
+
     return (
       <DraggableCard id="__new__">
         <div
-          className={`${colorForSubject(course.subject)} m-1 rounded-xl px-3 py-2 shadow-sm border`}
-          style={{ height: SLOT_PX }}
+          className={`${colorForSubject(course.subject)} h-full w-full box-border overflow-hidden rounded-xl shadow-sm border`}
+          style={{ minHeight: SLOT_PX - 8 }}
           title="Arrastra a la grilla"
         >
-          <div className="text-center leading-tight select-none">
-            <div className="text-[12px] font-semibold">{course.subject}</div>
-            <div className="text-[11px] opacity-80">{course.sp}</div>
-            <div className="text-[11px] font-medium">{course.docente}</div>
+          <div className="h-full w-full flex items-center justify-center text-center leading-tight select-none px-2">
+            <div className="leading-[1.05]">
+              <div className="text-[12px] font-semibold break-words">{course.subject}</div>
+              <div className="text-[11px] opacity-80">{course.sp}</div>
+              <div className="text-[11px] font-medium break-words">{course.docente}</div>
+            </div>
           </div>
         </div>
       </DraggableCard>
     );
   }
 
-  /* ===== UI: Grilla ===== */
+  /* ===== Grilla ===== */
   function Grid() {
     return (
       <div className="w-full overflow-auto" onClick={() => setSelectedCardId(null)}>
@@ -589,6 +589,7 @@ export default function UTQScheduler() {
     );
   }
 
+  /* DnD */
   function onDragStart() {}
   async function onDragEnd(ev: any) {
     const { active, over } = ev;
@@ -633,7 +634,9 @@ export default function UTQScheduler() {
 
       {/* Indicaciones */}
       <div className="p-3 bg-blue-50 text-blue-900 text-sm rounded-lg border border-blue-200">
-        <strong>Indicaciones:</strong> selecciona una asignatura y arrastra con <strong>click izquierdo</strong> para colocar o mover un bloque. Haz click sobre un bloque para mostrar el botón <strong>papelera</strong> y eliminarlo. La última asignatura seleccionada queda activa para colocar varias veces.
+        <strong>Indicaciones:</strong> selecciona una asignatura y arrastra con <strong>click izquierdo</strong> para
+        colocar o mover un bloque. Haz click sobre un bloque para mostrar el botón <strong>papelera</strong> y
+        eliminarlo. La última asignatura seleccionada queda activa para colocar varias veces.
       </div>
 
       {/* Selector de asignatura */}
