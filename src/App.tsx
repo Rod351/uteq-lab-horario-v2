@@ -1,6 +1,3 @@
-¡perfecto! aquí tienes el **`src/App.tsx` COMPLETO** (con la selección de asignatura que **se mantiene activa** para seguir colocando más bloques). Copia y pega todo el archivo:
-
-```tsx
 import React, { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
@@ -662,6 +659,3 @@ export default function UTQScheduler() {
     </div>
   );
 }
-```
-
-¿Quieres que también permita **doble click en una celda vacía** para colocar el bloque activo sin arrastrar? Te lo agrego en seguida.
