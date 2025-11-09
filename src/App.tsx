@@ -74,8 +74,8 @@ type Assignment = {
   sp: string;        // Semestre - Paralelo
   docente: string;
   dia: Dia;
-  startSlotIndex: number; // índice de SLOTS
-  durationSlots: number;  // compatibilidad (ahora siempre 1)
+  startSlotIndex: number;
+  durationSlots: number;  // mantenido por compatibilidad (siempre 1)
   color?: string;
   uid: string;
   updatedAt?: any;
@@ -202,8 +202,40 @@ function colorForSubject(name: string) {
     "bg-cyan-100 text-cyan-800",
     "bg-rose-100 text-rose-800",
   ];
-  const idx = Math.abs(name.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % colors.length;
+  const idx =
+    Math.abs(name.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) %
+    colors.length;
   return colors[idx];
+}
+
+/* ==== Limpieza de consistencia (anti-choques fantasma) ==== */
+function sweepConsistency(
+  slots: Record<string, string>,
+  asigs: Record<string, Assignment>
+) {
+  for (const k of Object.keys(slots)) {
+    const aid = slots[k];
+    const a = asigs[aid];
+    if (!a) {
+      delete slots[k];
+      continue;
+    }
+    const dur = a.durationSlots || 1;
+    let valid = false;
+    for (let i = 0; i < dur; i++) {
+      if (k === `${a.dia}|${a.startSlotIndex + i}`) {
+        valid = true;
+        break;
+      }
+    }
+    if (!valid) delete slots[k];
+  }
+}
+
+function dropAllRefsOfId(slots: Record<string, string>, id: string) {
+  for (const k of Object.keys(slots)) {
+    if (slots[k] === id) delete slots[k];
+  }
 }
 
 function DropCell({ id, children }: { id: string; children?: React.ReactNode }) {
@@ -220,7 +252,8 @@ function DropCell({ id, children }: { id: string; children?: React.ReactNode }) 
 }
 
 function DraggableCard({ id, children }: { id: string; children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id });
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id });
   const style = {
     transform: CSS.Translate.toString(transform),
     opacity: isDragging ? 0.85 : 1,
@@ -233,9 +266,19 @@ function DraggableCard({ id, children }: { id: string; children: React.ReactNode
   );
 }
 
-function CoursePicker({ value, setValue }: { value: string; setValue: (v: string) => void }) {
+function CoursePicker({
+  value,
+  setValue,
+}: {
+  value: string;
+  setValue: (v: string) => void;
+}) {
   return (
-    <select className="border rounded-lg px-3 py-2 text-sm w-[560px]" value={value} onChange={(e) => setValue(e.target.value)}>
+    <select
+      className="border rounded-lg px-3 py-2 text-sm w-[560px]"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+    >
       <option value="">— Selecciona —</option>
       {COURSES.map((o) => (
         <option key={o.id} value={o.id}>
@@ -254,7 +297,10 @@ export default function UTQScheduler() {
   const [busy, setBusy] = useState(false);
 
   const [currentWeek, setCurrentWeek] = useState<number>(1);
-  const scheduleRef = useMemo(() => doc(db, "schedules", `${LAB_ID}-w${String(currentWeek).padStart(2, "0")}`), [currentWeek]);
+  const scheduleRef = useMemo(
+    () => doc(db, "schedules", `${LAB_ID}-w${String(currentWeek).padStart(2, "0")}`),
+    [currentWeek]
+  );
 
   const [schedule, setSchedule] = useState<ScheduleDoc>({ assignments: {}, slots: {} });
   const assignments = schedule.assignments || {};
@@ -262,7 +308,7 @@ export default function UTQScheduler() {
   const slotKey = (dia: Dia, idx: number) => `${dia}|${idx}`;
 
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null); // selección para mostrar papelera
 
   /* Auth anónima */
   useEffect(() => {
@@ -299,19 +345,19 @@ export default function UTQScheduler() {
         const slots = { ...(data.slots || {}) } as Record<string, string>;
         const asigs = { ...(data.assignments || {}) } as Record<string, Assignment>;
 
-        const dur = 1;
-        for (let i = 0; i < dur; i++) {
-          const k = slotKey(dia, startSlotIndex + i);
-          const occ = slots[k];
-          if (occ && !asigs[occ]) delete slots[k]; // limpia basura
-        }
+        // 1) Limpieza global de consistencia
+        sweepConsistency(slots, asigs);
 
-        if (startSlotIndex < 0 || startSlotIndex + dur > SLOTS.length) throw new Error("Fuera de horario");
+        // 2) Validación destino
+        const dur = 1;
+        if (startSlotIndex < 0 || startSlotIndex + dur > SLOTS.length)
+          throw new Error("Fuera de horario");
         for (let i = 0; i < dur; i++) {
           const k = slotKey(dia, startSlotIndex + i);
           if (slots[k]) throw new Error("Ese casillero ya está ocupado");
         }
 
+        // 3) Crear
         const id = `a_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
         const asg: Assignment = {
           id,
@@ -325,7 +371,6 @@ export default function UTQScheduler() {
           uid,
           updatedAt: serverTimestamp(),
         };
-
         for (let i = 0; i < dur; i++) slots[slotKey(dia, startSlotIndex + i)] = id;
         asigs[id] = asg;
 
@@ -339,7 +384,7 @@ export default function UTQScheduler() {
     }
   }
 
-  /* ===== Mover existente ===== */
+  /* ===== Mover existente (ahora borra TODAS las refs del id y vuelve a colocar) ===== */
   async function moveAssignment(id: string, dia: Dia, startSlotIndex: number) {
     setBusy(true);
     try {
@@ -352,30 +397,34 @@ export default function UTQScheduler() {
         const current = asigs[id];
         if (!current) throw new Error("No existe la asignación");
 
-        // Libera TODOS los slots viejos (posible duración >1 del pasado)
-        const oldDur = current.durationSlots || 1;
-        for (let i = 0; i < oldDur; i++) {
-          const k = slotKey(current.dia, current.startSlotIndex + i);
-          if (slots[k] === id) delete slots[k];
-        }
+        // 1) Limpieza global de consistencia
+        sweepConsistency(slots, asigs);
 
-        // Limpia basura y valida destino
+        // 2) Borrar TODAS las referencias previas del id (por si quedó basura)
+        dropAllRefsOfId(slots, id);
+
+        // 3) Validar destino
         const dur = 1;
-        for (let i = 0; i < dur; i++) {
-          const k = slotKey(dia, startSlotIndex + i);
-          const occ = slots[k];
-          if (occ && !asigs[occ]) delete slots[k];
-        }
-        if (startSlotIndex < 0 || startSlotIndex + dur > SLOTS.length) throw new Error("Fuera de horario");
+        if (startSlotIndex < 0 || startSlotIndex + dur > SLOTS.length)
+          throw new Error("Fuera de horario");
         for (let i = 0; i < dur; i++) {
           const k = slotKey(dia, startSlotIndex + i);
           const occ = slots[k];
           if (occ && occ !== id) throw new Error("Choque con otra asignatura");
         }
 
+        // 4) Escribir nuevo destino
         for (let i = 0; i < dur; i++) slots[slotKey(dia, startSlotIndex + i)] = id;
 
-        asigs[id] = { ...current, dia, startSlotIndex, durationSlots: 1, uid, updatedAt: serverTimestamp() };
+        asigs[id] = {
+          ...current,
+          dia,
+          startSlotIndex,
+          durationSlots: 1,
+          uid,
+          updatedAt: serverTimestamp(),
+        };
+
         tx.set(scheduleRef, { slots, assignments: asigs }, { merge: true });
       });
       setSelectedCardId(null);
@@ -386,7 +435,7 @@ export default function UTQScheduler() {
     }
   }
 
-  /* ===== Eliminar (AHORA usando updateDoc + deleteField) ===== */
+  /* ===== Eliminar ===== */
   async function deleteAssignment(id: string) {
     setBusy(true);
     try {
@@ -406,7 +455,7 @@ export default function UTQScheduler() {
 
       await updateDoc(scheduleRef, updates);
 
-      // Actualización optimista local
+      // Optimista local
       setSchedule((prev) => {
         const nextSlots = { ...(prev.slots || {}) } as Record<string, string>;
         const nextAsigs = { ...(prev.assignments || {}) } as Record<string, Assignment>;
@@ -476,7 +525,11 @@ export default function UTQScheduler() {
       return <div className="text-xs text-gray-400">Selecciona una asignatura para activar el bloque</div>;
     return (
       <DraggableCard id="__new__">
-        <div className={`${colorForSubject(course.subject)} m-1 rounded-xl px-3 py-2 shadow-sm border`} style={{ height: SLOT_PX }} title="Arrastra a la grilla">
+        <div
+          className={`${colorForSubject(course.subject)} m-1 rounded-xl px-3 py-2 shadow-sm border`}
+          style={{ height: SLOT_PX }}
+          title="Arrastra a la grilla"
+        >
           <div className="text-center leading-tight select-none">
             <div className="text-[12px] font-semibold">{course.subject}</div>
             <div className="text-[11px] opacity-80">{course.sp}</div>
@@ -495,12 +548,17 @@ export default function UTQScheduler() {
           <div className="grid" style={{ gridTemplateColumns: `140px repeat(${DIAS.length}, 1fr)` }}>
             <div></div>
             {DIAS.map((d) => (
-              <div key={d} className="p-3 text-center font-semibold bg-gray-50 border-b">{d}</div>
+              <div key={d} className="p-3 text-center font-semibold bg-gray-50 border-b">
+                {d}
+              </div>
             ))}
 
             {TIME_LABELS.map((label, r) => (
               <React.Fragment key={`${label}-${r}`}>
-                <div className="px-2 py-1 text-xs text-gray-600 border-r flex items-start justify-end pr-3 bg-white" style={{ height: SLOT_PX }}>
+                <div
+                  className="px-2 py-1 text-xs text-gray-600 border-r flex items-start justify-end pr-3 bg-white"
+                  style={{ height: SLOT_PX }}
+                >
                   {label}
                 </div>
 
@@ -551,7 +609,9 @@ export default function UTQScheduler() {
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-bold">Reserva de Laboratorio (UTEQ)</h1>
-      <p className="text-sm text-gray-600">Lunes a Viernes · 07:30–17:30 · Bloques de 60 min · Guardado por semana (18 semanas)</p>
+      <p className="text-sm text-gray-600">
+        Lunes a Viernes · 07:30–17:30 · Bloques de 60 min · Guardado por semana (18 semanas)
+      </p>
 
       {/* Pestañas de semanas */}
       <div className="flex flex-wrap items-center gap-2">
@@ -559,7 +619,9 @@ export default function UTQScheduler() {
           <button
             key={w}
             onClick={() => setCurrentWeek(w)}
-            className={`px-3 py-1 rounded-full text-sm border ${w === currentWeek ? "bg-blue-600 text-white border-blue-600" : "bg-white hover:bg-gray-50"}`}
+            className={`px-3 py-1 rounded-full text-sm border ${
+              w === currentWeek ? "bg-blue-600 text-white border-blue-600" : "bg-white hover:bg-gray-50"
+            }`}
           >
             Semana {w}
           </button>
@@ -569,7 +631,8 @@ export default function UTQScheduler() {
 
       {/* Indicaciones */}
       <div className="p-3 bg-blue-50 text-blue-900 text-sm rounded-lg border border-blue-200">
-        <strong>Indicaciones:</strong> arrastra con <strong>click izquierdo</strong> para mover un bloque. Haz click sobre un bloque para mostrar el botón <strong>papelera</strong> y eliminarlo.
+        <strong>Indicaciones:</strong> arrastra con <strong>click izquierdo</strong> para mover un bloque.
+        Haz click sobre un bloque para mostrar el botón <strong>papelera</strong> y eliminarlo.
       </div>
 
       {/* Selector de asignatura */}
